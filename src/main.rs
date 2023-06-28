@@ -5,6 +5,12 @@ const PLAYER_SIZE: f32 = 10f32;
 const PLAYER_THRUST: f32 = 5.0;
 const PLAYER_TURN_SPEED: f32 = std::f32::consts::PI / 24.0;
 
+const PLAYER_SHOOT_DELAY: f32 = 0.5;
+
+const BULLET_SPEED: f32 = 100.0;
+const BULLET_LIFETIME: f32 = 1.0;
+const BULLET_RADIUS: f32 = 1.0;
+
 #[derive(Component, Debug, Default, PartialEq)]
 struct Velocity(Vec2);
 
@@ -14,10 +20,28 @@ struct Person;
 #[derive(Component, Debug, Eq, PartialEq)]
 struct Name(String);
 
+#[derive(Component, Debug)]
+struct LimitedLifetime {
+    timer: Timer,
+}
+
+#[derive(Component, Debug)]
+struct Bullet;
+
+#[derive(Bundle)]
+struct BulletBundle {
+    bullet: Bullet,
+    position: TransformBundle,
+    velocity: Velocity,
+    limited_lifetime: LimitedLifetime,
+}
+
 #[derive(Component, Default)]
 struct Ship {
     angle: f32,
     thrusting: bool,
+    shoot_requested: bool,
+    shoot_timer: Timer,
 }
 
 #[derive(Bundle)]
@@ -48,21 +72,7 @@ fn setup(mut commands: Commands, mut windows: Query<&mut Window>) {
         velocity: Velocity(Vec2::new(5.0, 10.0)),
         ship: Ship::default(),
     });
-
-    commands.spawn((Person, Name("Elaina Proctor".to_string())));
-    commands.spawn((Person, Name("Renzo Hume".to_string())));
-    commands.spawn((Person, Name("Zayna Nieves".to_string())));
 }
-
-// fn greet_people(time: Res<Time>, mut timer: ResMut<GreetTimer>, query: Query<&Name, With<Person>>) {
-//     // update our timer with the time elapsed since the last update
-//     // if that caused the timer to finish, we say hello to everyone
-//     if timer.0.tick(time.delta()).just_finished() {
-//         for name in &query {
-//             println!("hello {}!", name.0);
-//         }
-//     }
-// }
 
 fn quit_on_escape(keyboard_input: Res<Input<KeyCode>>, mut exit: EventWriter<AppExit>) {
     if keyboard_input.pressed(KeyCode::Escape) {
@@ -84,6 +94,8 @@ fn handle_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&mut Ship
         } else {
             ship.thrusting = false;
         }
+        ship.shoot_requested =
+            keyboard_input.pressed(KeyCode::Space) || keyboard_input.pressed(KeyCode::S);
     }
 }
 
@@ -123,6 +135,57 @@ fn draw_player(query: Query<(&Ship, &GlobalTransform)>, mut painter: ShapePainte
     }
 }
 
+fn draw_bullets(query: Query<(&Bullet, &GlobalTransform)>, mut painter: ShapePainter) {
+    for (_, position) in &mut query.iter() {
+        painter.set_translation(position.translation());
+        painter.color = Color::WHITE;
+        // painter.disable_laa = true;
+        // painter.thickness_type = ThicknessType::Pixels;
+        // painter.thickness = 2.0;
+
+        painter.circle(BULLET_RADIUS);
+    }
+}
+
+fn despawn_timed_out_entities(
+    mut commands: Commands,
+    time: Res<Time>,
+    query: Query<(Entity, &LimitedLifetime)>,
+) {
+    for (entity, lifetime) in query.iter() {
+        if lifetime.timer.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn shoot(mut commands: Commands, time: Res<Time>, mut query: Query<(&mut Ship, &GlobalTransform)>) {
+    for (mut ship, transform) in query.iter_mut() {
+        ship.shoot_timer.tick(time.delta());
+        if ship.shoot_requested {
+            if ship.shoot_timer.finished() {
+                ship.shoot_timer = Timer::from_seconds(PLAYER_SHOOT_DELAY, TimerMode::Once);
+                ship.shoot_timer.reset();
+
+                commands.spawn(BulletBundle {
+                    bullet: Bullet,
+                    position: TransformBundle::from_transform(
+                        transform.compute_transform().clone(),
+                    ),
+                    velocity: Velocity(Vec2::new(
+                        BULLET_SPEED * ship.angle.cos(),
+                        BULLET_SPEED * ship.angle.sin(),
+                    )),
+                    limited_lifetime: LimitedLifetime {
+                        timer: Timer::from_seconds(BULLET_LIFETIME, TimerMode::Once),
+                    },
+                });
+                println!("shoot!");
+            }
+        }
+    }
+}
+
 fn move_objects(time: Res<Time>, mut query: Query<(&mut Transform, &Velocity)>) {
     for (ref mut transform, velocity) in query.iter_mut() {
         transform.translation += velocity.0.extend(0.0) * time.delta_seconds();
@@ -138,6 +201,9 @@ impl Plugin for HelloPlugin {
             .add_system(handle_input)
             .add_system(quit_on_escape)
             .add_system(move_objects)
+            .add_system(despawn_timed_out_entities)
+            .add_system(shoot)
+            .add_system(draw_bullets)
             .add_system(draw_player);
     }
 }
