@@ -150,9 +150,10 @@ fn draw_bullets(query: Query<(&Bullet, &GlobalTransform)>, mut painter: ShapePai
 fn despawn_timed_out_entities(
     mut commands: Commands,
     time: Res<Time>,
-    query: Query<(Entity, &LimitedLifetime)>,
+    mut query: Query<(Entity, &mut LimitedLifetime)>,
 ) {
-    for (entity, lifetime) in query.iter() {
+    for (entity, mut lifetime) in query.iter_mut() {
+        lifetime.timer.tick(time.delta());
         if lifetime.timer.finished() {
             commands.entity(entity).despawn();
         }
