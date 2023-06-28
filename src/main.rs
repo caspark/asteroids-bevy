@@ -193,9 +193,23 @@ fn shoot(
     }
 }
 
-fn move_objects(time: Res<Time>, mut query: Query<(&mut Transform, &Velocity)>) {
+fn move_objects(
+    time: Res<Time>,
+    mut query: Query<(&mut Transform, &Velocity)>,
+    windows: Query<&Window>,
+) {
+    let window = windows.get_single().unwrap();
+    let (half_width, half_height) = (window.width() / 2.0, window.height() / 2.0);
+
     for (ref mut transform, velocity) in query.iter_mut() {
         transform.translation += velocity.0.extend(0.0) * time.delta_seconds();
+
+        if transform.translation.x < -half_width || transform.translation.x > half_width {
+            transform.translation.x *= -1.0;
+        }
+        if transform.translation.y < -half_height || transform.translation.y > half_height {
+            transform.translation.y *= -1.0;
+        }
     }
 }
 
