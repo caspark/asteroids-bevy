@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{app::AppExit, prelude::*};
 use bevy_vector_shapes::prelude::*;
 const PLAYER_SIZE: f32 = 10f32;
 
@@ -63,6 +63,12 @@ fn setup(mut commands: Commands, mut windows: Query<&mut Window>) {
 //         }
 //     }
 // }
+
+fn quit_on_escape(keyboard_input: Res<Input<KeyCode>>, mut exit: EventWriter<AppExit>) {
+    if keyboard_input.pressed(KeyCode::Escape) {
+        exit.send(AppExit);
+    }
+}
 
 fn handle_input(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&mut Ship, &mut Velocity)>) {
     for (ref mut ship, mut velocity) in query.iter_mut() {
@@ -130,6 +136,7 @@ impl Plugin for HelloPlugin {
         app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
             .add_startup_system(setup)
             .add_system(handle_input)
+            .add_system(quit_on_escape)
             .add_system(move_objects)
             .add_system(draw_player);
     }
