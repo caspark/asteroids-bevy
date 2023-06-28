@@ -7,8 +7,8 @@ const PLAYER_TURN_SPEED: f32 = std::f32::consts::PI / 24.0;
 
 const PLAYER_SHOOT_DELAY: f32 = 0.5;
 
-const BULLET_SPEED: f32 = 100.0;
-const BULLET_LIFETIME: f32 = 1.0;
+const BULLET_SPEED: f32 = 300.0;
+const BULLET_LIFETIME: f32 = 3.0;
 const BULLET_RADIUS: f32 = 1.0;
 
 #[derive(Component, Debug, Default, PartialEq)]
@@ -160,8 +160,12 @@ fn despawn_timed_out_entities(
     }
 }
 
-fn shoot(mut commands: Commands, time: Res<Time>, mut query: Query<(&mut Ship, &GlobalTransform)>) {
-    for (mut ship, transform) in query.iter_mut() {
+fn shoot(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(&mut Ship, &GlobalTransform, &Velocity)>,
+) {
+    for (mut ship, transform, velocity) in query.iter_mut() {
         ship.shoot_timer.tick(time.delta());
         if ship.shoot_requested {
             if ship.shoot_timer.finished() {
@@ -173,15 +177,17 @@ fn shoot(mut commands: Commands, time: Res<Time>, mut query: Query<(&mut Ship, &
                     position: TransformBundle::from_transform(
                         transform.compute_transform().clone(),
                     ),
-                    velocity: Velocity(Vec2::new(
-                        BULLET_SPEED * ship.angle.cos(),
-                        BULLET_SPEED * ship.angle.sin(),
-                    )),
+                    velocity: Velocity(
+                        velocity.0
+                            + Vec2::new(
+                                BULLET_SPEED * ship.angle.cos(),
+                                BULLET_SPEED * ship.angle.sin(),
+                            ),
+                    ),
                     limited_lifetime: LimitedLifetime {
                         timer: Timer::from_seconds(BULLET_LIFETIME, TimerMode::Once),
                     },
                 });
-                println!("shoot!");
             }
         }
     }
