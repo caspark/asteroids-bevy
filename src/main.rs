@@ -213,9 +213,9 @@ fn move_objects(
     }
 }
 
-pub struct HelloPlugin;
+pub struct AsteroidsPlugin;
 
-impl Plugin for HelloPlugin {
+impl Plugin for AsteroidsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
             .add_startup_system(setup)
@@ -233,6 +233,6 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugin(Shape2dPlugin::default())
-        .add_plugin(HelloPlugin)
+        .add_plugin(AsteroidsPlugin)
         .run();
 }
