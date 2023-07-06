@@ -1,4 +1,8 @@
-use bevy::{app::AppExit, prelude::*};
+use bevy::{
+    app::AppExit,
+    diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin},
+    prelude::*,
+};
 use bevy_turborand::prelude::*;
 use bevy_vector_shapes::prelude::*;
 const PLAYER_SIZE: f32 = 10f32;
@@ -74,13 +78,25 @@ struct AsteroidBundle {
 #[derive(Component, Debug, Default)]
 struct Game {
     // TODO render score in UI somewhere
-    score: f32,
+    score: i32,
 }
 
 #[derive(Bundle)]
 struct GameBundle {
     game: Game,
     rng: RngComponent,
+}
+
+#[derive(Component)]
+struct FpsText;
+
+#[derive(Component, Default)]
+struct ScoreText;
+
+impl ScoreText {
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[derive(Resource)]
@@ -142,6 +158,52 @@ fn setup(
     });
 }
 
+fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let font = asset_server.load("fonts/FiraMono-Medium.ttf");
+    let standard_style = TextStyle {
+        font: font.clone(),
+        font_size: 32.0,
+        color: Color::WHITE,
+    };
+
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new("Score:", standard_style.clone()),
+            TextSection::new("0", standard_style.clone()),
+        ]),
+        ScoreText::new(),
+    ));
+
+    commands.spawn((
+        TextBundle::from_sections([
+            TextSection::new(
+                "FPS: ",
+                TextStyle {
+                    font: font.clone(),
+                    font_size: 32.0,
+                    color: Color::WHITE,
+                },
+            ),
+            TextSection::from_style(TextStyle {
+                font: font.clone(),
+                font_size: 32.0,
+                color: Color::GOLD,
+            }),
+        ])
+        .with_text_alignment(TextAlignment::Left)
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            position: UiRect {
+                bottom: Val::Px(15.0),
+                right: Val::Px(15.0),
+                ..default()
+            },
+            ..default()
+        }),
+        FpsText,
+    ));
+}
+
 fn quit_on_escape(keyboard_input: Res<Input<KeyCode>>, mut exit: EventWriter<AppExit>) {
     if keyboard_input.pressed(KeyCode::Escape) {
         exit.send(AppExit);
@@ -199,7 +261,6 @@ fn draw_player(query: Query<(&Ship, &GlobalTransform)>, mut painter: ShapePainte
         painter.line(p1, p2);
         painter.line(p2, p3);
         painter.line(p3, p1);
-        // println!("player position: {:?}", position);
     }
 }
 
@@ -304,7 +365,7 @@ fn check_collisions(
             {
                 commands.entity(asteroid_entity).despawn();
                 commands.entity(bullet_entity).despawn();
-                game.score += 1.0;
+                game.score += 1;
             }
         }
 
@@ -317,9 +378,37 @@ fn check_collisions(
                 // TODO end game and restart it
                 commands.entity(asteroid_entity).despawn();
                 commands.entity(ship_entity).despawn();
-                game.score -= 1.0;
+                game.score -= 1;
             }
         }
+    }
+}
+
+fn update_fps_text(diagnostics: Res<Diagnostics>, mut query: Query<&mut Text, With<FpsText>>) {
+    for mut text in &mut query {
+        if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
+            if let Some(value) = fps.smoothed() {
+                text.sections[1].value = format!("{value:.2}");
+            }
+        }
+    }
+}
+
+fn update_score_text(
+    time: Res<Time>,
+    mut text_query: Query<&mut Text, With<ScoreText>>,
+    game: Query<&Game>,
+) {
+    for mut text in &mut text_query {
+        let seconds = time.elapsed_seconds();
+
+        text.sections[1].style.color = Color::Rgba {
+            red: (1.25 * seconds).sin() / 2.0 + 0.5,
+            green: (0.75 * seconds).sin() / 2.0 + 0.5,
+            blue: (0.50 * seconds).sin() / 2.0 + 0.5,
+            alpha: 1.0,
+        };
+        text.sections[1].value = format!("{}", game.single().score);
     }
 }
 
@@ -329,8 +418,12 @@ impl Plugin for AsteroidsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GreetTimer(Timer::from_seconds(2.0, TimerMode::Repeating)))
             .add_plugin(RngPlugin::default())
+            .add_plugin(FrameTimeDiagnosticsPlugin::default())
             .add_startup_system(setup)
+            .add_startup_system(ui_setup)
             .add_system(handle_input)
+            .add_system(update_fps_text)
+            .add_system(update_score_text)
             .add_system(quit_on_escape)
             .add_system(move_objects)
             .add_system(despawn_timed_out_entities)
